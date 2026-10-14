@@ -142,7 +142,7 @@
 </html>
 
 
-  <script>
+  <script type="module">
     /*!
  * @file Mii rendering with body, accurate scaling,
  * all shaders, shadow, and head model from glTF.
@@ -1124,9 +1124,6 @@ function main() {
   requestAnimationFrame(animate); // Start animation loop.
 }
 document.addEventListener('DOMContentLoaded', main);
-
-model.traverse(n => /arm|elbow|wrist|shoulder/.test(n.name) &&
-  console.log(n.name, n.isBone ? 'Bone' : n.type, n.parent?.name, n.scalling?.toArray(), n.rotation.toArray()));
 
   </script>
 </body>
