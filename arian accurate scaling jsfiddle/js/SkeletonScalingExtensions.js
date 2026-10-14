@@ -61,6 +61,7 @@ import * as THREE from 'three';
  * @typedef {THREE.Bone & {
  * scalling: THREE.Vector3|undefined,
  * scaleForRootAdjust: THREE.Vector3Like|undefined,
+ * scaleForRootSelf: THREE.Vector3Like|undefined,
  * }} BoneWithScaling
  */
 
@@ -90,6 +91,8 @@ function addSkeletonScalingExtensions(Skeleton) {
 		const _offsetMatrix = /* @__PURE__ */ new THREE.Matrix4();
 
 		const scaleMatrix = /* @__PURE__ */ new THREE.Matrix4();
+		/** Skinning-only world matrix for the root bone (see `scaleForRootSelf`). */
+		const _rootSkinMatrix = /* @__PURE__ */ new THREE.Matrix4();
 		const posVec = /* @__PURE__ */ new THREE.Vector3();
 
 		// Used for decomposing/composing when updating attachments:
@@ -117,20 +120,22 @@ function addSkeletonScalingExtensions(Skeleton) {
 		 * @param {THREE.Object3D &
 		 * {scaleForRootAdjust: THREE.Vector3Like|undefined}} bone - The bone to check/adjust for.
 		 * @param {THREE.Matrix4} matrix - The local matrix.
+		 * @param {THREE.Vector3Like|undefined} [scaleOverride] - Scale vector to use instead of
+		 * the bone's `scaleForRootAdjust`. Used to adjust the root bone itself (see `scaleForRootSelf`).
 		 */
-		function adjustTranslationForRoot(bone, matrix) {
+		function adjustTranslationForRoot(bone, matrix, scaleOverride) {
 			// scaleForRootAdjust being present on the bone itself indicates its parent is root.
 			// NOTE: This checks the bone's own property rather than the parent's, since the
 			// root (e.g. skl_root) is sometimes not skinned, so it may not be a THREE.Bone
 			// instance at all (GLTFLoader only creates THREE.Bone for skinned joints).
-			if (!bone.scaleForRootAdjust) {
+			const scale = scaleOverride || bone.scaleForRootAdjust;
+			if (!scale) {
 				return;
 			}
 
 			// Get translation/W-axis from matrix.
 			const translation = tmpTrans.setFromMatrixPosition(matrix);
-			// Use the scale vector to adjust translation.
-			const scale = bone.scaleForRootAdjust;
+			// (Scale vector used to adjust translation is `scale`, above.)
 
 			// Multiply translation by YYX axes:
 			translation.x *= scale.y;
@@ -260,7 +265,20 @@ function addSkeletonScalingExtensions(Skeleton) {
 			// Update boneMatrices[] (like the original update function)
 			const idx = /** @type {Map<THREE.Object3D, number>} */ (_walkIndexMap).get(node);
 			if (idx !== undefined) {
-				_offsetMatrix.multiplyMatrices(matrixWorld,
+				/** The world matrix that is fed to skinning for this bone. */
+				let skinWorld = matrixWorld;
+				// If this is the root bone itself and it has skinned vertices (for example
+				// the top of the pants' waistband), it must be moved exactly like its
+				// children (chest, hip) or those vertices stay behind when height changes.
+				// This is ONLY used for skinning: children below still receive the
+				// unadjusted `matrixWorld`, because they apply this adjustment themselves.
+				const rootSelf = /** @type {BoneWithScaling} */ (/** @type {unknown} */ (node)).scaleForRootSelf;
+				if (rootSelf) {
+					skinWorld = _rootSkinMatrix.copy(matrixWorld);
+					adjustTranslationForRoot(
+						/** @type {BoneWithScaling} */ (/** @type {unknown} */ (node)), skinWorld, rootSelf);
+				}
+				_offsetMatrix.multiplyMatrices(skinWorld,
 					/** @type {Array<THREE.Matrix4>} */ (_walkBoneInverses)[idx]);
 				_offsetMatrix.toArray(/** @type {Float32Array} */ (_walkBoneMatrices), idx * 16);
 			}

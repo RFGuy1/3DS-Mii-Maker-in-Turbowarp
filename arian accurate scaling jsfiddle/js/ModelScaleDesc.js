@@ -213,6 +213,14 @@ function applyScaleDescToNode(node, scaleVector, desc) {
 		bone.scaleForRootAdjust = scaleVector; // Set scale vector to be used.
 	}
 
+	// If this IS the root, flag it so its own skinning matrix gets the same translation
+	// adjustment as its children. Vertices weighted directly to the root (such as the
+	// pants' waistband) would otherwise not follow chest/hip as the height changes.
+	// (Its children are unaffected, they get their own adjustment from the above.)
+	if (name === desc.root) {
+		bone.scaleForRootSelf = scaleVector;
+	}
+
 	// Skip if explicitly listed in `none`.
 	if (desc.none?.includes(name)) {
 		return;
